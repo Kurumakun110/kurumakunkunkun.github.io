@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live PA Field Guide - Pop/Rock Manual</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chosen Palette: Slate & Indigo (Warm Neutral Background: bg-slate-50) -->
+    <!-- Application Structure Plan: 
+         1. Dashboard/Basics: Two-tier structure (Quick Guide / Deep Dive).
+         2. EQ Map: Enhanced detail section below visualizer.
+            - Updated: Bubbles now use range bars (parallel lines) instead of single points.
+            - Updated: Spectrum ticks spacing adjusted for logarithmic feel.
+         3. Dynamics Control: Fader-style sliders with expanded explanation.
+         4. Troubleshooting: Detailed noise/feedback guide.
+         5. References: Clickable links for all sources.
+    -->
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans JP', sans-serif; }
+        
+        /* Custom Utilities - Dynamics Sliders */
+        .fader-track-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 220px;
+            width: 60px; /* Wider container to hold side labels */
+            margin: 0 auto;
+            position: relative;
+        }
+        .fader-track {
+            position: relative;
+            width: 8px;
+            height: 100%;
+            background: #e2e8f0;
+            border-radius: 4px;
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.1);
+            margin: 0 auto;
+            z-index: 1;
+        }
+        .fader-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #6366f1; /* Indigo-500 */
+            border-radius: 4px;
+            transition: height 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .fader-thumb {
+            position: absolute;
+            left: 50%;
+            transform: translate(-50%, 50%);
+            bottom: 0; /* JS will update bottom % */
+            width: 24px;
+            height: 14px;
+            background: #475569;
+            border-radius: 3px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            border-top: 1px solid #94a3b8;
+            transition: bottom 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 10;
+            cursor: pointer;
+        }
+        /* Side Labels for Faders - Visible at all times */
+        .fader-scale {
+            position: absolute;
+            right: -25px; /* Moved to the side */
+            top: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            color: #64748b;
+            font-size: 10px;
+            font-family: monospace;
+            z-index: 0;
+            pointer-events: none;
+            text-align: left;
+            width: 30px;
+        }
+        
+        /* EQ Spectrum Styles */
+        .spectrum-container {
+            position: relative;
+            width: 100%;
+            height: 350px; 
+            margin-top: 40px;
+            margin-bottom: 20px;
+            overflow: hidden; 
+            background-color: #f8fafc;
+            border-radius: 8px;
+        }
+        .spectrum-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: #94a3b8;
+            z-index: 1;
+        }
+        .spectrum-tick {
+            position: absolute;
+            top: 50%;
+            width: 1px;
+            height: 10px;
+            background: #cbd5e1;
+            transform: translateY(-50%);
+            z-index: 0;
+        }
+        .spectrum-tick.major {
+            height: 16px;
+            background: #94a3b8;
+        }
+        .spectrum-label {
+            position: absolute;
+            top: 50%;
+            margin-top: 15px;
+            transform: translateX(-50%);
+            font-size: 0.7rem;
+            color: #64748b;
+            font-weight: 500;
+            font-family: monospace;
+        }
+        
+        /* Speech Bubbles & Range Bars */
+        .eq-range-container {
+            position: absolute;
+            /* left & width set by JS */
+            height: 4px;
+            top: 50%;
+            transform: none;
+            transition: all 0.4s ease;
+            opacity: 0;
+            z-index: 10;
+        }
+        .eq-range-container.boost {
+            top: 48%;
+        }
+        .eq-range-container.cut,
+        .eq-range-container.hpf {
+            top: 52%;
+        }
+        .eq-range-container.show {
+            opacity: 1;
+        }
+        
+        /* The horizontal bar indicating frequency range */
+        .eq-range-bar {
+            width: 100%;
+            height: 100%;
+            border-radius: 2px;
+            position: relative;
+        }
+
+        /* Boost Styles */
+        .boost .eq-range-bar {
+            background-color: #22c55e; /* Green */
+        }
+        .boost .eq-bubble {
+            bottom: 100%;
+            margin-bottom: 10px; /* Distance from bar */
+            background-color: #dcfce7; 
+            border: 1px solid #22c55e; 
+            color: #15803d; 
+        }
+        .boost .eq-bubble::after {
+            top: 100%;
+            border-color: #22c55e transparent transparent transparent;
+        }
+
+        /* Cut Styles */
+        .cut .eq-range-bar {
+            background-color: #ef4444; /* Red */
+        }
+        .cut .eq-bubble {
+            top: 100%;
+            margin-top: 10px; /* Distance from bar */
+            background-color: #fee2e2; 
+            border: 1px solid #ef4444; 
+            color: #b91c1c; 
+        }
+        .cut .eq-bubble::after {
+            bottom: 100%;
+            border-color: transparent transparent #ef4444 transparent;
+        }
+
+        /* HPF Styles */
+        .hpf .eq-range-bar {
+            background-color: #64748b; /* Slate */
+        }
+        .hpf .eq-bubble {
+            top: 100%;
+            margin-top: 10px;
+            background-color: #f1f5f9;
+            border: 1px solid #64748b;
+            color: #475569;
+        }
+        .hpf .eq-bubble::after {
+            bottom: 100%;
+            border-color: transparent transparent #64748b transparent;
+        }
+        
+        /* Bubble itself */
+        .eq-bubble {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            pointer-events: none; /* Let clicks pass through */
+        }
+        /* Bubble Pointer */
+        .eq-bubble::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+        }
+
+        /* Connector Line (vertical from bar to bubble) */
+        .bubble-connector {
+            position: absolute;
+            left: 50%;
+            width: 1px;
+            background-color: currentColor;
+            opacity: 0.5;
+        }
+        .boost .bubble-connector {
+            bottom: 0;
+            /* height controlled by inline style in JS */
+        }
+        .cut .bubble-connector, .hpf .bubble-connector {
+            top: 0;
+            /* height controlled by inline style in JS */
+        }
+
+
+        /* Detail Table Styles */
+        .freq-row:hover {
+            background-color: #f8fafc;
+        }
+
+        /* Instrument Selector Grid Buttons */
+        .inst-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            aspect-ratio: 1 / 1;
+            padding: 0.5rem;
+            border-radius: 0.75rem;
+            border-width: 1px;
+            transition: all 0.2s;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #334155;
+            background-color: #ffffff;
+            border-color: #e2e8f0;
+        }
+        .inst-btn:hover {
+            border-color: #6366f1;
+            background-color: #f8fafc;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .inst-btn.active {
+            border-color: #6366f1;
+            background-color: #e0e7ff;
+            color: #4338ca;
+            ring-width: 2px;
+            ring-color: #818cf8;
+        }
+        .inst-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        /* Signal Chain Flowchart Nodes */
+        .signal-node {
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .signal-node::after {
+            content: '▼';
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #94a3b8;
+            font-size: 12px;
+        }
+        .signal-node:last-child::after {
+            display: none;
+        }
+        /* Mobile horizontal layout for desktop */
+        @media (min-width: 768px) {
+            .signal-node::after {
+                content: '▶';
+                bottom: auto;
+                right: -20px;
+                top: 50%;
+                left: auto;
+                transform: translateY(-50%);
+            }
+        }
+
+        /* Tab Transitions */
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Section Divider */
+        .section-divider {
+            display: flex;
+            align-items: center;
+            margin: 2rem 0;
+            color: #94a3b8;
+            font-weight: bold;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+        }
+        .section-divider::before, .section-divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px dashed #cbd5e1;
+        }
+        .section-divider::before { margin-right: 1rem; }
+        .section-divider::after { margin-left: 1rem; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-50 border-b border-slate-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🎚️</span>
+                <h1 class="text-xl font-bold text-slate-900 tracking-tight">PA Field Guide <span class="text-xs font-normal text-slate-500 ml-2">Pop/Rock Edition</span></h1>
+            </div>
+            <!-- Mobile Menu Button -->
+            <button id="menu-btn" class="md:hidden text-2xl" onclick="toggleMobileMenu()">☰</button>
+        </div>
+        
+        <!-- Navigation -->
+        <nav class="bg-slate-100 overflow-x-auto" id="main-nav">
+            <div class="max-w-7xl mx-auto px-4 flex space-x-8 text-sm font-medium whitespace-nowrap" id="nav-container">
+                <!-- Nav items injected by JS -->
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+
+        <!-- SECTION 1: BASICS & PRIORITIES (Two-Tier Structure) -->
+        <div id="view-basics" class="tab-content active">
+            
+            <!-- Intro -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                <h2 class="text-2xl font-bold text-indigo-900 mb-4">基本原則と優先順位</h2>
+                <div class="text-slate-600 space-y-4 text-sm leading-relaxed">
+                    <p>
+                        PA（Public Address / Sound Reinforcement）の目的は、音量の増幅のみに留まりません。
+                        その本質は<strong>「音楽的意図を汲み取り、適切なバランスで明瞭に聴衆へ届けること」</strong>にあります。
+                        本章では、現場で即座に確認すべき「優先順位」と「入力レベル管理」の指針を示し、さらにその背景にある理論を解説します。
+                    </p>
+                </div>
+            </div>
+
+            <!-- TIER 1: QUICK GUIDE -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start mb-8">
+                
+                <!-- Priority Detail -->
+                <div class="bg-white p-6 rounded-lg border border-slate-200 shadow-sm h-full flex flex-col">
+                    <h3 class="text-lg font-bold text-slate-700 mb-4 pl-2 border-l-4 border-rose-500 flex items-center justify-between">
+                        ミキシングの絶対優先順位
+                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded border">Quick Guide</span>
+                    </h3>
+                    
+                    <ul class="space-y-4 flex-1">
+                        <li class="p-4 bg-rose-50 rounded border border-rose-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <strong class="text-rose-800 text-lg">1. ボーカル (Vocals)</strong>
+                                <span class="text-xs bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full font-bold">最優先</span>
+                            </div>
+                            <p class="text-sm text-slate-700 leading-snug">
+                                ポップスにおいて歌詞の伝達は不可欠です。他の楽器がどんなに素晴らしい音でも、ボーカルをマスクしてはなりません。
+                            </p>
+                        </li>
+                        <li class="p-4 bg-indigo-50 rounded border border-indigo-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <strong class="text-indigo-800 text-lg">2. リズム隊 (Kick/Bass/Snare)</strong>
+                                <span class="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full font-bold">土台</span>
+                            </div>
+                            <p class="text-sm text-slate-700 leading-snug">
+                                楽曲のグルーヴとエネルギーを決定づける骨格です。低域の処理（キックとベースの分離）が全体の質を左右します。
+                            </p>
+                        </li>
+                        <li class="p-4 bg-slate-50 rounded border border-slate-200">
+                            <div class="flex items-center justify-between mb-2">
+                                <strong class="text-slate-800 text-lg">3. 上物 (Guitars/Keys)</strong>
+                                <span class="text-xs bg-slate-200 text-slate-800 px-2 py-0.5 rounded-full font-bold">装飾</span>
+                            </div>
+                            <p class="text-sm text-slate-700 leading-snug">
+                                和音や彩りを添える要素です。ボーカル帯域と競合する場合は、音量やEQでスペースを譲る調整が必要です。
+                            </p>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Gain Staging Detail -->
+                <div class="bg-white p-6 rounded-lg border border-slate-200 shadow-sm h-full flex flex-col">
+                    <h3 class="text-lg font-bold text-slate-700 mb-4 pl-2 border-l-4 border-green-500 flex items-center justify-between">
+                        ゲイン・ステージング手順
+                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded border">Quick Guide</span>
+                    </h3>
+
+                    <!-- ★ ここが新しく入る「PA基礎情報」ゾーン ★ -->
+                    <div class="bg-slate-50 rounded-lg border border-slate-100 p-4 mb-4 text-xs text-slate-700 space-y-3">
+                        <p class="font-bold text-slate-800 text-sm">
+                            【アナログミキサー1chの信号の流れ（簡略）】
+                        </p>
+                        <ol class="list-decimal list-inside space-y-1">
+                            <li><strong>入力端子</strong>：マイク(XLR)／ライン(TRS) → 必要に応じてPADや位相反転。</li>
+                            <li><strong>ゲイン(HA, TRIM)</strong>：最初にレベルを決める場所。ここでS/N比がほぼ決まる。</li>
+                            <li><strong>フィルター・EQ</strong>：HPFで不要低域をカット → 各帯域EQで音色調整。</li>
+                            <li><strong>AUX送信</strong>：モニター(中音)・リバーブなどへの送りレベルを決定。</li>
+                            <li><strong>PAN</strong>：L/Rの定位を決める（モノPAでも「どのスピーカー寄りか」に影響）。</li>
+                            <li><strong>フェーダー</strong>：最終的なバランス調整。原則「0dB付近」で使えるようにゲインを作る。</li>
+                        </ol>
+
+                        <p class="font-bold text-slate-800 text-sm pt-1">
+                            【フェーダーの「0dB」とメーターの「0dB」の違い】
+                        </p>
+                        <ul class="list-disc list-inside space-y-1">
+                            <li><strong>フェーダー0dB</strong>：そのチャンネル内部で「増減なし」の位置。ここを基準に設計されている。</li>
+                            <li><strong>メーター0dB</strong>：機種ごとに違うが、「まだ歪まない上限付近」を指す目安。絶対値ではない。</li>
+                            <li>ゲイン調整では、「PFLメーターが0dB付近」「フェーダーは0dB前後」を同時に満たすのが理想。</li>
+                        </ul>
+
+                        <p class="font-bold text-slate-800 text-sm pt-1">
+                            【PA全体で意識する3つのレベル】
+                        </p>
+                        <ul class="list-disc list-inside space-y-1">
+                            <li><strong>入力レベル</strong>（チャンネルゲイン）：小さすぎるとノイズが目立つ／大きすぎるとすぐクリップ。</li>
+                            <li><strong>バス/マスターのレベル</strong>：各チャンネルの合計。ここが常に赤いなら、そもそも全体のゲインが高すぎる。</li>
+                            <li><strong>スピーカー側のボリューム</strong>：ミキサーで適正レベルを作った上で、最後に会場の音量に合わせて調整する。</li>
+                        </ul>
+                    </div>
+
+                    <!-- 既存の「適正レベル設定フロー」はそのまま残す -->
+                    <div class="space-y-4 flex-1">
+                        <div class="text-sm">
+                            <strong class="block text-slate-800 mb-2 border-b border-slate-100 pb-1">
+                                適正レベル設定フロー
+                            </strong>
+                            <ol class="list-decimal list-inside text-sm text-slate-700 space-y-2">
+                                <li>チャンネルフェーダーを<strong>「0dB (ユニティ)」</strong>の位置に固定します。</li>
+                                <li><strong>PFL (Pre-Fader Listen)</strong>スイッチを押し、入力信号のみをメーターで監視できる状態にします。</li>
+                                <li>演者に最大音量で演奏してもらいます。</li>
+                                <li><strong>TRIM / GAIN</strong> つまみを操作し、メーターのピークが「0〜+4dB（黄色点灯の手前）」に収まるよう調整します。</li>
+                                <li>PFLを解除し、フェーダー操作で最終的なミックスバランスを整えます。</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION DIVIDER -->
+            <div class="section-divider">詳細解説・理論背景</div>
+
+            <!-- TIER 2: DEEP DIVE -->
+            <div class="space-y-8">
+                
+                <!-- Signal Chain Visualization -->
+                <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <span class="text-indigo-500">Signal Flow</span> 信号の流れとシステム構造
+                    </h3>
+                    <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+                        音響トラブルの多くは、信号の流れ（シグナルフロー）を追うことで特定できます。
+                        音がマイクロホンで電気信号に変換され、スピーカーから再び音として出力されるまでの各工程と役割を理解することは、エンジニアの基礎教養です。
+                    </p>
+
+                    <div class="flex flex-col md:flex-row gap-4 justify-between bg-slate-50 p-6 rounded-xl border border-slate-200 mb-6">
+                        
+                        <div class="signal-node flex-1">
+                            <div class="text-2xl mb-2">🎤</div>
+                            <div class="font-bold text-slate-800">1. SOURCE (入力)</div>
+                            <div class="text-xs text-slate-500 font-mono mb-2">Transducer</div>
+                            <p class="text-xs text-slate-700 leading-snug">
+                                音響エネルギー（空気振動）を電気信号に変換する段階です。<br>
+                                マイクの種類（ダイナミック/コンデンサー）や指向性の選択が、後の音質を決定づけます。
+                            </p>
+                        </div>
+
+                        <div class="signal-node flex-1 bg-white ring-2 ring-indigo-100">
+                            <div class="text-2xl mb-2">🎛️</div>
+                            <div class="font-bold text-slate-800">2. MIXER (調整)</div>
+                            <div class="text-xs text-slate-500 font-mono mb-2">Processing</div>
+                            <p class="text-xs text-slate-700 leading-snug">
+                                <strong>HA (Head Amp):</strong> 微弱な信号をラインレベルまで増幅。<br>
+                                <strong>EQ/Comp:</strong> 音質とダイナミクスの補正。<br>
+                                <strong>Summing:</strong> 複数の信号を左右2ch等に混合。
+                            </p>
+                        </div>
+
+                        <div class="signal-node flex-1">
+                            <div class="text-2xl mb-2">⚡</div>
+                            <div class="font-bold text-slate-800">3. AMP (増幅)</div>
+                            <div class="text-xs text-slate-500 font-mono mb-2">Amplification</div>
+                            <p class="text-xs text-slate-700 leading-snug">
+                                パワーアンプにて、スピーカーのボイスコイルを駆動できるレベル（数10V〜）まで電力増幅を行います。<br>
+                                パワードスピーカーでは筐体に内蔵されています。
+                            </p>
+                        </div>
+
+                        <div class="signal-node flex-1">
+                            <div class="text-2xl mb-2">🔊</div>
+                            <div class="font-bold text-slate-800">4. SPEAKER (出力)</div>
+                            <div class="text-xs text-slate-500 font-mono mb-2">Transducer</div>
+                            <p class="text-xs text-slate-700 leading-snug">
+                                強力な電気信号を再び物理的な空気振動（音響エネルギー）へ変換し、空間へ放出します。<br>
+                                設置位置がハウリングマージンに直結します。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deep Dive: Gain Staging Logic -->
+                <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <span class="text-green-500">Deep Dive</span> ゲイン・ステージングの理論的背景
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm text-slate-700 leading-relaxed">
+                        <div>
+                            <h4 class="font-bold text-slate-900 mb-2 border-b pb-1">S/N比の最大化とは？</h4>
+                            <p class="mb-4">
+                                アナログ回路には必ず固有のノイズ（フロアノイズ）が存在します。入力信号（Signal）が小さすぎると、このノイズ（Noise）との比率が悪化し、「サー」というヒスノイズが目立つ結果となります。
+                                逆に信号が大きすぎると、回路の許容量を超えて波形が歪み（クリップ）、不快な音になります。
+                                ゲイン調整とは、この<strong>「ノイズに埋もれず、かつ歪まない最適なレベル」</strong>に信号を持ち上げる作業です。
+                            </p>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-slate-900 mb-2 border-b pb-1">フェーダー解像度の確保</h4>
+                            <p class="mb-4">
+                                フェーダーは、0dB（ユニティ）付近で最も細やかな音量調整ができるように設計されています（対数特性）。
+                                ゲインが不適切でフェーダーを極端に下げた位置（-30dB以下など）で使用すると、わずかな指の動きで音量が激変してしまい、微細なミックス調整が不可能になります。
+                                <strong>「フェーダーを0dB付近で操作できるようにゲインを決める」</strong>ことが、ミックスの操作性を担保します。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- SECTION 2: EQ VISUALIZER (Redesigned Range Bars) -->
+        <div id="view-eq" class="tab-content">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                
+                <!-- Intro Quick Guide -->
+                <div class="mb-8">
+                    <h2 class="text-2xl font-bold text-indigo-900 mb-2">音の棲み分け (EQ Map & Details)</h2>
+                    <p class="text-slate-600 text-sm leading-relaxed mb-4">
+                        イコライザー（EQ）の主目的は「音作り」ではなく<strong>「帯域の整理」</strong>です。
+                        各楽器がお互いの周波数帯域を侵食しないよう、不要な成分をカットする「引き算の思考」が、クリアなアンサンブルを実現します。
+                        <br><span class="text-xs text-slate-500">※以下の図解では、調整すべき周波数帯域を「幅（レンジ）」で示しています。個体差や曲調に合わせて、この範囲内で調整してください。</span>
+                    </p>
+                    <div class="flex gap-4 text-xs font-bold text-slate-500 bg-slate-50 p-3 rounded border border-slate-100 w-fit">
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-green-500 rounded-sm"></span>Boost: 特徴強調</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-red-500 rounded-sm"></span>Cut: 濁り除去</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-slate-500 rounded-sm"></span>HPF: 不要低域</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col lg:flex-row gap-6 mb-8">
+                    <!-- Instrument Selector -->
+                    <div class="w-full lg:w-1/4 space-y-4">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Select Instrument</h3>
+                        <!-- Main Grid -->
+                        <div class="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-2 gap-2" id="eq-grid-container">
+                            <!-- Buttons generated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Visualization -->
+                    <div class="w-full lg:w-3/4">
+                        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative min-h-[400px]">
+                            <div class="flex justify-between items-center border-b pb-2 mb-2">
+                                <h3 class="text-lg font-bold text-slate-800" id="eq-target-title">Instrument Name</h3>
+                                <span class="text-xs text-slate-400 font-mono">20Hz - 20kHz (Log Scale)</span>
+                            </div>
+                            
+                            <!-- Spectrum Ruler -->
+                            <div class="spectrum-container" id="spectrum-container">
+                                <!-- The Line -->
+                                <div class="spectrum-line"></div>
+                                
+                                <!-- Ticks & Labels (20〜20k Log Scale: 20, 50, 100, 200, 500, 1k, 2k, 5k, 10k, 20k) -->
+                                <!-- 20Hz -->
+                                <div class="spectrum-tick major" style="left: 0%"></div>
+                                <div class="spectrum-label" style="left: 0%">20</div>
+                                <!-- 50Hz -->
+                                <div class="spectrum-tick" style="left: 13.3%"></div>
+                                <div class="spectrum-label" style="left: 13.3%">50</div>
+
+                                <!-- 100Hz (Major) -->
+                                <div class="spectrum-tick major" style="left: 23.3%"></div>
+                                <div class="spectrum-label" style="left: 23.3%">100</div>
+
+                                <!-- 200Hz -->
+                                <div class="spectrum-tick" style="left: 33.3%"></div>
+                                <div class="spectrum-label" style="left: 33.3%">200</div>
+
+                                <!-- 500Hz (Major) -->
+                                <div class="spectrum-tick major" style="left: 46.6%"></div>
+                                <div class="spectrum-label" style="left: 46.6%">500</div>
+
+                                <!-- 1kHz (Major) -->
+                                <div class="spectrum-tick major" style="left: 56.6%"></div>
+                                <div class="spectrum-label" style="left: 56.6%">1k</div>
+
+                                <!-- 2kHz -->
+                                <div class="spectrum-tick" style="left: 66.7%"></div>
+                                <div class="spectrum-label" style="left: 66.7%">2k</div>
+
+                                <!-- 5kHz (Major) -->
+                                <div class="spectrum-tick major" style="left: 79.9%"></div>
+                                <div class="spectrum-label" style="left: 79.9%">5k</div>
+
+                                <!-- 10kHz -->
+                                <div class="spectrum-tick" style="left: 90%"></div>
+                                <div class="spectrum-label" style="left: 90%">10k</div>
+
+                                <!-- 20kHz (Major) -->
+                                <div class="spectrum-tick major" style="left: 100%"></div>
+                                <div class="spectrum-label" style="left: 100%; transform: translateX(-100%);">20k</div>
+
+
+                                <!-- Bubbles injected here -->
+                                <div id="bubbles-layer"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION DIVIDER -->
+                <div class="section-divider">詳細解説・処理ガイド</div>
+
+                <!-- Detail Table -->
+                <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                            <span>📖</span> 周波数帯域別 処理指針
+                        </h3>
+                    </div>
+                    <div class="p-0 overflow-x-auto">
+                        <table class="w-full text-sm text-left text-slate-700">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-100 border-b">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 w-1/5 whitespace-nowrap">周波数帯域 (目安)</th>
+                                    <th scope="col" class="px-6 py-3 w-1/4">音響的特徴・役割</th>
+                                    <th scope="col" class="px-6 py-3 w-1/2">具体的な処理・アドバイス</th>
+                                </tr>
+                            </thead>
+                            <tbody id="eq-detail-table-body">
+                                <!-- JS Content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 3: DYNAMICS (COMPRESSOR) REDESIGNED -->
+        <div id="view-comp" class="tab-content">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                
+                <!-- Quick Guide -->
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-indigo-900">ダイナミクス制御 (全楽器対応)</h2>
+                </div>
+                <p class="text-slate-600 mb-6 max-w-3xl text-sm leading-relaxed">
+                    コンプレッサーは、音量の最大値と最小値の差（ダイナミックレンジ）を圧縮し、音量を均一化するエフェクトです。
+                    さらに、音の立ち上がり（アタック）と余韻（リリース）を操作することで、リズムの「パンチ感」や音の「前後感」をコントロールする音作りのツールとしても機能します。
+                </p>
+
+                <!-- Instrument Tabs -->
+                <div class="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-7 gap-2 mb-8" id="comp-tabs-container">
+                    <!-- JS Injected Buttons -->
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mb-8">
+                    
+                    <!-- Faders Panel -->
+                    <div class="bg-slate-100 rounded-xl p-6 border border-slate-200 shadow-inner">
+                        <div class="grid grid-cols-4 gap-4 h-full">
+                            <!-- Threshold -->
+                            <div class="relative group fader-track-container">
+                                <label class="text-xs font-bold text-slate-500 uppercase mb-2 block text-center">Threshold</label>
+                                <div class="fader-track bg-slate-300">
+                                    <div class="fader-fill bg-slate-400 opacity-50" style="height: 60%"></div>
+                                    <div class="fader-thumb bg-slate-600" style="bottom: 60%"></div>
+                                    <div class="fader-scale"><span>0</span><span>-20</span><span>-40</span><span>-60</span></div>
+                                </div>
+                                <div class="text-center mt-3"><div class="text-xs text-slate-500 font-mono">Gain Reduction Check</div></div>
+                            </div>
+                            <!-- Ratio -->
+                            <div class="relative group fader-track-container">
+                                <label class="text-xs font-bold text-slate-500 uppercase mb-2 block text-center">Ratio</label>
+                                <div class="fader-track">
+                                    <div class="fader-fill" id="fill-ratio"></div>
+                                    <div class="fader-thumb" id="thumb-ratio"></div>
+                                    <div class="fader-scale"><span>∞</span><span>8:1</span><span>4:1</span><span>1:1</span></div>
+                                </div>
+                                <div class="text-center mt-3"><div class="text-indigo-600 font-bold text-sm" id="val-ratio">4:1</div></div>
+                            </div>
+                            <!-- Attack -->
+                            <div class="relative group fader-track-container">
+                                <label class="text-xs font-bold text-slate-500 uppercase mb-2 block text-center">Attack</label>
+                                <div class="fader-track">
+                                    <div class="fader-fill" id="fill-attack"></div>
+                                    <div class="fader-thumb" id="thumb-attack"></div>
+                                    <div class="fader-scale"><span>F</span><span>.</span><span>.</span><span>S</span></div>
+                                </div>
+                                <div class="text-center mt-3"><div class="text-indigo-600 font-bold text-sm" id="val-attack">Fast</div></div>
+                            </div>
+                            <!-- Release -->
+                            <div class="relative group fader-track-container">
+                                <label class="text-xs font-bold text-slate-500 uppercase mb-2 block text-center">Release</label>
+                                <div class="fader-track">
+                                    <div class="fader-fill" id="fill-release"></div>
+                                    <div class="fader-thumb" id="thumb-release"></div>
+                                    <div class="fader-scale"><span>F</span><span>.</span><span>.</span><span>S</span></div>
+                                </div>
+                                <div class="text-center mt-3"><div class="text-indigo-600 font-bold text-sm" id="val-release">100ms</div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Context Panel -->
+                    <div class="bg-indigo-50 rounded-xl border border-indigo-100 h-full flex flex-col p-6">
+                        <div class="border-b border-indigo-200 pb-3 mb-3">
+                            <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <span id="comp-target-icon">🎤</span>
+                                <span id="comp-target-name">Vocal Setting</span>
+                            </h3>
+                        </div>
+                        <div class="space-y-4 text-slate-700 leading-relaxed text-sm flex-1" id="comp-description">
+                            <!-- JS Content -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION DIVIDER -->
+                <div class="section-divider">パラメータ詳細解説</div>
+
+                <!-- Deep Dive Content -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-slate-700">
+                    <div class="bg-white p-5 rounded-lg border border-slate-200">
+                        <h4 class="font-bold text-slate-900 mb-2">Threshold (スレッショルド)</h4>
+                        <p class="leading-relaxed">コンプレッサーが動作を開始する「しきい値」です。入力音がこのレベルを超えた瞬間に圧縮が始まります。音量を揃えたい場合は低めに設定して常に微弱にかける手法もありますが、アタック感を出す場合はピーク時のみ反応するよう高めに設定します。</p>
+                    </div>
+                    <div class="bg-white p-5 rounded-lg border border-slate-200">
+                        <h4 class="font-bold text-slate-900 mb-2">Ratio (レシオ)</h4>
+                        <p class="leading-relaxed">しきい値を超えた音をどの程度圧縮するかの「比率」です。4:1の場合、しきい値を4dB超えた入力は、出力では1dBの上昇に抑えられます。数字が大きいほど強力に抑え込みますが、不自然になりやすいため、通常は2:1〜4:1が推奨されます。</p>
+                    </div>
+                    <div class="bg-white p-5 rounded-lg border border-slate-200">
+                        <h4 class="font-bold text-slate-900 mb-2">Attack (アタックタイム)</h4>
+                        <p class="leading-relaxed">しきい値を超えてから圧縮が完了するまでの「遅れ時間」です。ここが最も重要です。最速にすると音の頭（トランジェント）が即座に潰れ、音が奥に引っ込みます。逆に遅くすると（10ms〜）、最初のアタック音だけが圧縮されずに通過し、その後の音が潰れるため、「ドンッ」というパンチ感が強調されます。</p>
+                    </div>
+                    <div class="bg-white p-5 rounded-lg border border-slate-200">
+                        <h4 class="font-bold text-slate-900 mb-2">Release (リリースタイム)</h4>
+                        <p class="leading-relaxed">入力がしきい値を下回った後、圧縮を解除して元の音量に戻るまでの時間です。曲のテンポに合わせるのが基本です。速すぎると不自然な音量変動（ポンピング）が起き、遅すぎると次の音が鳴る時まで圧縮が続き、音が埋もれてしまいます。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+                <!-- SECTION FX: 空間系・その他エフェクト（新タブ） -->
+        <div id="view-fx" class="tab-content">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-2xl font-bold text-indigo-900 mb-3">
+                    空間系・その他エフェクトの基本
+                </h2>
+                <p class="text-sm text-slate-700 mb-6">
+                    ここではコンプレッサー／EQ以外の、ライブPAでよく使うエフェクトの要点をまとめる。
+                    いずれも<strong>「掛けすぎない」「役割をはっきりさせる」</strong>ことが大前提。
+                    ロック／ポップスのコピーライブで実際にどう使うかに絞っている。
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-slate-700">
+
+                    <!-- Reverb -->
+                    <div class="bg-slate-50 rounded-lg border border-slate-200 p-5">
+                        <h4 class="font-bold text-slate-900 mb-2">
+                            Reverb（リバーブ） – 空間の響きを作る
+                        </h4>
+                        <p class="mb-2">
+                            残響を加えて音に広がりや奥行きを与えるエフェクト。会場の響きを人工的に作ることで、
+                            演奏全体をなじませたり、ボーカルやソロを気持ちよく聴かせる目的で使う。
+                        </p>
+                        <ul class="list-disc list-inside space-y-1 text-xs text-slate-600">
+                            <li>
+                                <span class="font-semibold">代表的なタイプ：</span>
+                                ルーム系（短くタイト。ドラム全体やボーカルにうっすら）／
+                                ホール系（長く広い。バラードのボーカルやシンセ）／
+                                プレート系（ボーカル用にまとまりやすい残響）。
+                            </li>
+                            <li>
+                                <span class="font-semibold">ボーカルの基本：</span>
+                                プリディレイは<span class="whitespace-nowrap">30〜50ms</span>前後で声の立ち上がりを残し、
+                                ディケイは<span class="whitespace-nowrap">1.5〜2.5秒</span>程度を目安に「気持ちいいが埋もれない」長さに調整する。
+                            </li>
+                            <li>
+                                <span class="font-semibold">低域カットを習慣に：</span>
+                                リバーブのLow-cut（High-pass）を使い、100Hz以下は思い切って削ると
+                                低音のモコモコを防げる。残響の高域も少し落とすと、主音との分離が良くなる。
+                            </li>
+                            <li>
+                                <span class="font-semibold">楽器ごとのざっくり方針：</span>
+                                ドラム＝ルーム系でライブ感を少し足す／カッティング系ギター＝浅めのルーム／
+                                シンセパッドやストリングス＝ホール系で奥行き、など
+                                「役割に応じて別のリバーブ」を使い分けると立体感が出る。
+                            </li>
+                            <li>
+                                <span class="font-semibold">モニターには基本送らない：</span>
+                                返しに深いリバーブを送るとピッチ感が狂いやすく、ハウリングの原因にもなる。
+                                どうしても必要な場合は薄く、もしくはIEM（インイヤー）前提で考える。
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Delay -->
+                    <div class="bg-slate-50 rounded-lg border border-slate-200 p-5">
+                        <h4 class="font-bold text-slate-900 mb-2">
+                            Delay（ディレイ） – リズムと奥行きを強調する反復
+                        </h4>
+                        <p class="mb-2">
+                            原音を遅らせて繰り返す「やまびこ」効果。リバーブが空間全体を満たすのに対し、
+                            ディレイはハッキリした反復音で、奥行きやリズムのノリを強調できる。
+                        </p>
+                        <ul class="list-disc list-inside space-y-1 text-xs text-slate-600">
+                            <li>
+                                <span class="font-semibold">ショートディレイ／ダブリング：</span>
+                                10〜100ms程度で1回だけ返す設定。ボーカルやギターに少量混ぜると、
+                                ダブルトラック風の厚みが出る。「かかっているか分かるか分からない程度」から始める。
+                            </li>
+                            <li>
+                                <span class="font-semibold">スラップバック：</span>
+                                80〜150ms程度・フィードバックほぼ0回で「1発だけ跳ね返る」ディレイ。
+                                ロカビリー系ボーカルやクリーンギターで、存在感と奥行きを足す定番。
+                            </li>
+                            <li>
+                                <span class="font-semibold">テンポディレイ：</span>
+                                曲のBPMに合わせて8分音符／付点8分などに設定すると自然になじむ。
+                                ボーカルに薄く足して「奥に伸びる感じ」を出したり、
+                                シンセアルペジオにかけてグルーヴを強調したりできる。
+                            </li>
+                            <li>
+                                <span class="font-semibold">基本的なつまみの目安：</span>
+                                フィードバックは数回軽く返る程度（20〜40％前後）、
+                                ミックスは原音の邪魔をしない程度（20〜30％前後）からスタートし、
+                                会場の響きに合わせて微調整する。
+                            </li>
+                            <li>
+                                <span class="font-semibold">リバーブとの併用：</span>
+                                「短めプレート＋薄いテンポディレイ」の組み合わせは、
+                                芯を残しつつ深みを出す定番。やりすぎるとごちゃごちゃするので、
+                                物足りないくらいから少しずつ足していく。
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Modulation -->
+                    <div class="bg-slate-50 rounded-lg border border-slate-200 p-5">
+                        <h4 class="font-bold text-slate-900 mb-2">
+                            Modulation（コーラス／フランジャー／フェイザー）
+                        </h4>
+                        <p class="mb-2">
+                            音程や位相を周期的に揺らして厚みや動きを出すエフェクト群。
+                            効果が派手で存在感があるため、漫然と全体にかけると混濁・マスキングの原因になりやすい。
+                        </p>
+                        <ul class="list-disc list-inside space-y-1 text-xs text-slate-600">
+                            <li>
+                                <span class="font-semibold">コーラス：</span>
+                                15〜30ms程度遅らせた音＋わずかなピッチ揺れで「複数人で弾いている」ような厚みを付加。
+                                アコギのストロークやシンセパッド、バックコーラスなど
+                                「脇役のパート」に薄く使うと効果的。ローズ系エレピとの相性も良い。
+                            </li>
+                            <li>
+                                <span class="font-semibold">フランジャー：</span>
+                                ごく短い遅延と強いフィードバックで「ジェット機」的な派手なうねりを出す特殊効果。
+                                歪んだギターの一部フレーズなど、曲中の「ここぞ」の演出向けで、常時かけっぱなしにはしない。
+                            </li>
+                            <li>
+                                <span class="font-semibold">フェイザー：</span>
+                                位相を回転させて「スーッ」としたフィルター感のある揺れを作る。
+                                クリーンギターやシンセに加えると浮遊感を出せるが、
+                                かけすぎると他パートと干渉して埋もれやすい。
+                            </li>
+                            <li>
+                                <span class="font-semibold">運用のポイント：</span>
+                                「このサビのギターを広げる」「この曲のバッキングコーラスだけ厚くする」など
+                                目的を明確にし、不要なときはすぐ切る。
+                                リードボーカルの耳返しには基本かけない（ピッチ感が取りづらくなる）など、
+                                モニターへの影響にも注意する。
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Harmonizer -->
+                    <div class="bg-slate-50 rounded-lg border border-slate-200 p-5">
+                        <h4 class="font-bold text-slate-900 mb-2">
+                            Harmonizer（ハーモナイザー／ピッチシフト系）
+                        </h4>
+                        <p class="mb-2">
+                            入力された声や楽器の音程をシフトして別の音程を自動生成し、
+                            原音と合わせてハーモニーを作るエフェクト。
+                            コーラス要員が少ないバンドでも、サビだけ多声コーラスを再現できる。
+                        </p>
+                        <ul class="list-disc list-inside space-y-1 text-xs text-slate-600">
+                            <li>
+                                <span class="font-semibold">典型的な用途：</span>
+                                主旋律に対して3度上／5度下などのハモりを足し、
+                                「サビだけ一気に厚くする」使い方が中心。
+                                1オクターブ下を薄く重ねて太さを足したり、
+                                1オクターブ上で可憐さをプラスする使い方もある。
+                            </li>
+                            <li>
+                                <span class="font-semibold">ギターや鍵盤にも：</span>
+                                ツインリード風のギターフレーズを一人で再現したり、
+                                シンセに1オクターブ下を足して迫力を増すといった使い方も可能。
+                            </li>
+                            <li>
+                                <span class="font-semibold">注意点（音楽理論）：</span>
+                                キー設定やコード進行と合っていないと、生成されるハモりが不協和音になりやすい。
+                                キー固定のまま転調する曲では破綻しやすいため、
+                                曲ごとにキーやスケール設定を確認する。
+                            </li>
+                            <li>
+                                <span class="font-semibold">注意点（音量とハウリング）：</span>
+                                ハーモニーを出しすぎると主役が誰か分からなくなるので、
+                                あくまで「主旋律を支える裏方」レベルに抑える。
+                                1人のマイクから2声以上出すとハウリング余裕が減るため、
+                                モニターレベルやEQも慎重に調整する。
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Gate / Expander -->
+                    <div class="bg-slate-50 rounded-lg border border-slate-200 p-5">
+                        <h4 class="font-bold text-slate-900 mb-2">
+                            Gate / Expander（ノイズカットとダイナミクス拡大）
+                        </h4>
+                        <p class="mb-2">
+                            一定以下の小さい音をさらに小さくすることでノイズや不要な音を目立たなくするエフェクト。
+                            コンプレッサーが「大きい音を潰す」のに対して、
+                            ゲート／エキスパンダーは「小さい音をもっと小さくする」方向に働く。
+                        </p>
+                        <ul class="list-disc list-inside space-y-1 text-xs text-slate-600">
+                            <li>
+                                <span class="font-semibold">ノイズゲート：</span>
+                                しきい値以下の音量になると信号をほぼ遮断する。
+                                ドラムのスネア／タムマイクにかけて
+                                「叩いていないときのハイハットやステージノイズ」を切る使い方が代表例。
+                            </li>
+                            <li>
+                                <span class="font-semibold">エキスパンダー：</span>
+                                しきい値以下の音を徐々に絞る、マイルドなゲート。
+                                アコギやボーカルマイクの環境ノイズを少しだけ下げたいときなどに役立つ。
+                            </li>
+                            <li>
+                                <span class="font-semibold">設定のコツ：</span>
+                                しきい値を高くしすぎると、弱いニュアンスやリリースが不自然に切れてしまう。
+                                アタック／リリースをややゆったり目にし、
+                                「効いているが演奏が不自然に途切れない」ラインを探る。
+                            </li>
+                            <li>
+                                <span class="font-semibold">使い所：</span>
+                                ドラムマイクのかぶり対策、歪みギターのハムノイズ軽減、
+                                静かな曲の間の環境ノイズカットなど、
+                                「静かなところをスッキリさせる」用途でポイント的に使う。
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Multiband -->
+                    <div class="bg-slate-50 rounded-lg border border-slate-200 p-5">
+                        <h4 class="font-bold text-slate-900 mb-2">
+                            Multiband Comp / Multiband系 – 「最後の一手」向けツール
+                        </h4>
+                        <p class="mb-2">
+                            周波数帯域を複数に分け、それぞれに別々のコンプレッションやエキスパンド処理を行う高度なエフェクト。
+                            「低域だけ暴れる」「耳に痛い高域だけ抑えたい」といった問題にピンポイントで対処できる。
+                        </p>
+                        <ul class="list-disc list-inside space-y-1 text-xs text-slate-600">
+                            <li>
+                                <span class="font-semibold">典型的な用途：</span>
+                                どうしても低音が出過ぎる会場で、サブ〜低域バンドだけ軽く圧縮する／
+                                ボーカルの耳に痛い高域だけ抑える／
+                                ギターアンプの60Hzハムだけ下げる、など。
+                            </li>
+                            <li>
+                                <span class="font-semibold">ライブでの注意点：</span>
+                                クロスオーバー付近で位相が回りやすく、設定を誤ると逆に音が濁ったり定位がふらつく。
+                                ライブ本番中にいじり倒すのは危険なので、リハーサルでじっくり詰めるか、
+                                経験豊富なエンジニアだけが触るくらいのつもりで扱う。
+                            </li>
+                            <li>
+                                <span class="font-semibold">考え方：</span>
+                                「音をよくしたいから何となく掛ける」のではなく、
+                                <span class="italic">『この帯域のこの問題を解決するためにだけ使う』</span>という姿勢が基本。
+                                普通のコンプとEQで十分な場合は、無理にマルチバンドを使う必要はない。
+                            </li>
+                            <li>
+                                <span class="font-semibold">定位や音質のチェック：</span>
+                                効き方が聴感上分かりづらいことも多いため、
+                                十分なモニター環境でじっくり確認し、
+                                ステレオ感や位相の違和感が出ていないかを必ずチェックする。
+                            </li>
+                        </ul>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+
+        <!-- SECTION 4: TROUBLESHOOTING (Expanded) -->
+        <div id="view-trouble" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Howling (Feedback) Guide -->
+                <div class="bg-white rounded-xl shadow-sm border border-red-200 p-6">
+                    <h2 class="text-xl font-bold text-red-700 mb-4 flex items-center gap-2 border-b border-red-100 pb-2">
+                        <span>📢</span> ハウリング対策 (Feedback Control)
+                    </h2>
+                    
+                    <div class="space-y-6">
+                        <!-- Quick Guide -->
+                        <div class="bg-red-50 p-4 rounded-lg border border-red-100">
+                            <h3 class="font-bold text-red-800 text-sm mb-2">【緊急対応】 ハウリングが発生したら？</h3>
+                            <ol class="list-decimal list-inside text-sm text-red-900 font-bold space-y-1">
+                                <li>まず、マスターフェーダーを少し下げる（音量を落とす）。</li>
+                                <li>原因となっているマイクやモニターを特定する。</li>
+                                <li>特定の周波数をEQでカット（下記参照）するか、マイクの向きを変える。</li>
+                            </ol>
+                        </div>
+
+                        <!-- Deep Dive: Frequencies -->
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-sm mb-3">周波数別 ハウリングの聞き分けと対処</h3>
+                            <div class="space-y-2">
+                                <div class="flex items-start p-3 bg-white rounded border border-slate-200 shadow-sm">
+                                    <span class="w-24 font-mono font-bold text-slate-800 text-sm pt-0.5">250-500Hz</span>
+                                    <div class="flex-1">
+                                        <div class="text-sm font-bold text-red-600 mb-1">「ボー」「ホー」 (低域共鳴)</div>
+                                        <p class="text-xs text-slate-600 leading-relaxed">
+                                            部屋の定在波や、床置きモニターの低音過多が原因であることが多いです。モニターのグラフィックEQで左側（低域）をなだらかにカットしてください。
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start p-3 bg-white rounded border border-slate-200 shadow-sm">
+                                    <span class="w-24 font-mono font-bold text-slate-800 text-sm pt-0.5">800-1kHz</span>
+                                    <div class="flex-1">
+                                        <div class="text-sm font-bold text-orange-600 mb-1">「ウー」「ミー」 (中域)</div>
+                                        <p class="text-xs text-slate-600 leading-relaxed">
+                                            ボーカルマイクの感度が最も高い帯域周辺です。マイクのグリルを手で覆う「カップリング」をすると、この帯域の指向性が崩れて強烈にハウリングします。
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start p-3 bg-white rounded border border-slate-200 shadow-sm">
+                                    <span class="w-24 font-mono font-bold text-slate-800 text-sm pt-0.5">2k-4kHz</span>
+                                    <div class="flex-1">
+                                        <div class="text-sm font-bold text-yellow-600 mb-1">「キーン」「ピー」 (高域)</div>
+                                        <p class="text-xs text-slate-600 leading-relaxed">
+                                            コンプレッサーでメイクアップゲインを上げすぎている場合や、リバーブの成分がモニターに返りすぎている場合に発生しやすいです。耳へのダメージが大きいので迅速にカットします。
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Noise & Power Troubleshooting -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                    <h2 class="text-xl font-bold text-indigo-900 mb-4 flex items-center gap-2 border-b border-indigo-100 pb-2">
+                        <span>⚡</span> ノイズ・電源トラブルシューティング
+                    </h2>
+                    
+                    <div class="space-y-6">
+                        <!-- Noise Types -->
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-sm mb-3">ノイズの種類と原因特定</h3>
+                            <ul class="space-y-3">
+                                <li class="bg-slate-50 p-3 rounded border border-slate-100">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-xs font-bold">ブーン (Hum)</span>
+                                        <strong class="text-sm text-slate-800">電源周波数の混入 (50/60Hz)</strong>
+                                    </div>
+                                    <p class="text-xs text-slate-600">
+                                        アース不良（グラウンドループ）や、音声ケーブルと電源ケーブルの並走が原因です。DIのグラウンドリフトスイッチを切り替えるか、配線ルートを見直します。
+                                    </p>
+                                </li>
+                                <li class="bg-slate-50 p-3 rounded border border-slate-100">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-xs font-bold">ジー (Buzz)</span>
+                                        <strong class="text-sm text-slate-800">電磁誘導ノイズ</strong>
+                                    </div>
+                                    <p class="text-xs text-slate-600">
+                                        調光器（照明システム）やディスプレイからの干渉です。特にシングルコイルのギターが拾いやすいです。楽器の向きを変えることで軽減できる場合があります。
+                                    </p>
+                                </li>
+                                <li class="bg-slate-50 p-3 rounded border border-slate-100">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-xs font-bold">ガリ/バリ</span>
+                                        <strong class="text-sm text-slate-800">物理的な接触不良</strong>
+                                    </div>
+                                    <p class="text-xs text-slate-600">
+                                        ケーブル断線、ジャックの汚れ、ポットの劣化が原因です。ケーブルを揺らしてノイズが出る場合は即座に交換してください。
+                                    </p>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Power Tips -->
+                        <div class="bg-indigo-50 p-4 rounded-lg">
+                            <h3 class="font-bold text-indigo-800 text-sm mb-2">電源管理の鉄則</h3>
+                            <ul class="list-decimal list-inside text-xs text-indigo-900 space-y-1">
+                                <li><strong>たこ足配線の禁止:</strong> 電圧降下により音質劣化や機材のシャットダウンを招きます。壁コンセントから分散して電源を取ります。</li>
+                                <li><strong>起動順序 (ON):</strong> 音源・ミキサーなど上流機器 → パワーアンプ・スピーカー（最後にON）。</li>
+                                <li><strong>終了順序 (OFF):</strong> パワーアンプ・スピーカー（最初にOFF） → 音源・ミキサー。<br>※逆に行うと「ボツッ」というポップノイズでスピーカーを破損する恐れがあります。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 5: REFERENCES (New) -->
+        <div id="view-refs" class="tab-content">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-2xl font-bold text-slate-800 mb-6 border-b pb-2">参考文献 (References)</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    
+                    <!-- PA Basics & Theory -->
+                    <div>
+                        <h3 class="font-bold text-indigo-700 mb-4 text-sm uppercase tracking-wide border-l-4 border-indigo-500 pl-2">音響理論・ミキシング基礎</h3>
+                        <ul class="list-disc list-inside text-sm space-y-2 text-slate-700">
+                            <li><a href="https://www.ragnet.co.jp/band-sound-segregate" target="_blank" class="text-indigo-600 hover:underline">ライブ時の楽器の「音のすみ分け」は理解しておこう！ (Ragnet)</a></li>
+                            <li><a href="https://shunbass.com/" target="_blank" class="text-indigo-600 hover:underline">バンドにおける音の棲み分け (shunの見る世界)</a></li>
+                            <li><a href="https://skye-is.co.jp/musicfan/equipment/699/" target="_blank" class="text-indigo-600 hover:underline">PAさんの音作りの方向性 (MusicFan)</a></li>
+                            <li><a href="https://www.prosoundweb.com" target="_blank" class="text-indigo-600 hover:underline">Setting Sound System And Mixing Console Gain Staging (ProSoundWeb)</a></li>
+                            <li><a href="https://theproaudiofiles.com/live-sound-basics/" target="_blank" class="text-indigo-600 hover:underline">The Essential Guide to the Basics of Live Sound (Pro Audio Files)</a></li>
+                            <li><a href="https://www.bhphotovideo.com/explora/pro-audio/tips-and-solutions/live-sound-101-event-sound-system-design-and-setup" target="_blank" class="text-indigo-600 hover:underline">Live Sound 101: Event Sound System Design and Setup (B&H Photo Video)</a></li>
+                            <li><a href="https://yoppa.org/mit-ws3-25/17474.html" target="_blank" class="text-indigo-600 hover:underline">PAシステム入門：基本原理から会場規模別機材構成まで (yoppa org)</a></li>
+                            <li><a href="https://digireco.com/mag_interview/" target="_blank" class="text-indigo-600 hover:underline">PAエンジニアに聞く！ PAシステムや機材選定 (DiGiRECO)</a></li>
+                            <li><a href="https://worshipsoundguy.com" target="_blank" class="text-indigo-600 hover:underline">Gain Staging For Live Church Sound (Worship Sound Guy)</a></li>
+                            <li><a href="https://soundonsound.com" target="_blank" class="text-indigo-600 hover:underline">Gain Staging In Your DAW Software (Sound On Sound)</a></li>
+                            <li><a href="https://gear4music.com" target="_blank" class="text-indigo-600 hover:underline">A Comprehensive Guide to Live Sound Mixing (Gear4Music)</a></li>
+                            <li><a href="https://gearspace.com" target="_blank" class="text-indigo-600 hover:underline">How do YOU approach gain structure for live? (Gearspace)</a></li>
+                            <li><a href="https://behindthemixer.com" target="_blank" class="text-indigo-600 hover:underline">How to Set Gain Levels in Live Sound - Three Methods (Behind The Mixer)</a></li>
+                            <li><a href="https://avid.com" target="_blank" class="text-indigo-600 hover:underline">Guide to gain staging in audio production (Avid)</a></li>
+                            <li><a href="https://thetonerooms.com" target="_blank" class="text-indigo-600 hover:underline">Understanding and using live sound equipment (The Tone Rooms)</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Equipment & Technique (EQ, Comp, Feedback) -->
+                    <div>
+                        <h3 class="font-bold text-indigo-700 mb-4 text-sm uppercase tracking-wide border-l-4 border-indigo-500 pl-2">機材・実践テクニック (EQ, Comp, Feedback)</h3>
+                        <ul class="list-disc list-inside text-sm space-y-2 text-slate-700">
+                            <li><a href="https://jp.yamaha.com/products/contents/proaudio/mailmagazine/archive/tips06.html" target="_blank" class="text-indigo-600 hover:underline">PAお役立ち情報 其の6 コンプレッサーの基礎知識 (YAMAHA)</a></li>
+                            <li><a href="https://www.soundhouse.co.jp/download/sonota/comp.pdf" target="_blank" class="text-indigo-600 hover:underline">最強コンプレッサーマニュアル (Soundhouse)</a></li>
+                            <li><a href="https://www.soundhouse.co.jp/download/sonota/eq.pdf" target="_blank" class="text-indigo-600 hover:underline">最強イコライジングマニュアル (Soundhouse)</a></li>
+                            <li><a href="https://www.soundhouse.co.jp/contents/staff-blog/index?post=2958" target="_blank" class="text-indigo-600 hover:underline">PA初心者必見 (Soundhouse)</a></li>
+                            <li><a href="https://www.izotope.jp/jp/news/tutorial-vocal-mix-33-2/" target="_blank" class="text-indigo-600 hover:underline">ボーカルのコンプレッション (iZotope Japan)</a></li>
+                            <li><a href="https://www.izotope.jp/jp/news/tutorial-vocal-mix-12/" target="_blank" class="text-indigo-600 hover:underline">ドラムを迫力ある音に仕上げたい人へ (iZotope Japan)</a></li>
+                            <li><a href="https://music-growlab.com/eq-shuhasu/" target="_blank" class="text-indigo-600 hover:underline">EQ設定の黄金比 (Music Grow Lab)</a></li>
+                            <li><a href="https://service.shure.com/s/article/how-to-control-feedback-in-a-sound-system" target="_blank" class="text-indigo-600 hover:underline">How to Control Feedback in a Sound System (Shure)</a></li>
+                            <li><a href="https://shure.com" target="_blank" class="text-indigo-600 hover:underline">Introduction to Recording and Sound Reinforcement (Shure)</a></li>
+                            <li><a href="https://sounddesignlive.com/6-smart-proven-methods-to-control-feedback-onstage/" target="_blank" class="text-indigo-600 hover:underline">6 Smart, Proven Methods To Control Feedback Onstage (Sound Design Live)</a></li>
+                            <li><a href="https://www.guitarcenter.com/riffs/expert-advice/live-sound/stage-monitoring-guide" target="_blank" class="text-indigo-600 hover:underline">Ultimate Guide to Stage Monitoring (Guitar Center)</a></li>
+                            <li><a href="https://electromarket.co.uk" target="_blank" class="text-indigo-600 hover:underline">How do I stop feedback on my PA System? (ElectroMarket)</a></li>
+                            <li><a href="https://soundonsound.com" target="_blank" class="text-indigo-600 hover:underline">Preventing Acoustic Feedback On Stage (Sound On Sound)</a></li>
+                            <li><a href="https://mixingmusiclive.com" target="_blank" class="text-indigo-600 hover:underline">9 Tips on Avoiding and Eliminating Feedback in Live Sound (Mixing Music Live)</a></li>
+                            <li><a href="https://behindthemixer.com" target="_blank" class="text-indigo-600 hover:underline">Proper Stage Monitor Setup (Behind The Mixer)</a></li>
+                            <li><a href="https://china-sanway.com" target="_blank" class="text-indigo-600 hover:underline">How to Reduce Feedback Noise (Sanway)</a></li>
+                            <li><a href="https://harmonycentral.com" target="_blank" class="text-indigo-600 hover:underline">Any tips for Mixing from the Stage? (Harmony Central)</a></li>
+                            <li><a href="https://line6.com" target="_blank" class="text-indigo-600 hover:underline">Real world Gigging advice re Helix (Line 6)</a></li>
+                            <li><a href="https://digireco.com/196-1/" target="_blank" class="text-indigo-600 hover:underline">絶対わかるコンプレッサー (DIGIRECO)</a></li>
+                            <li><a href="https://mizonote.com" target="_blank" class="text-indigo-600 hover:underline">コンプレッサーだけを使ってドラムにパンチを加える方法 (mizonote)</a></li>
+                            <li><a href="https://sleepfreaks-dtm.com/dtm-mix-technique/compressor-2/" target="_blank" class="text-indigo-600 hover:underline">MIXに必須の「コンプレッサー」 (Sleepfreaks)</a></li>
+                            <li><a href="https://sleepfreaks-dtm.com/dtm-mix-technique/parallel-compression-sound/" target="_blank" class="text-indigo-600 hover:underline">パラレルコンプレッション (Sleepfreaks)</a></li>
+                            <li><a href="https://www.minet.jp/contents/article/mastercomp8tips/" target="_blank" class="text-indigo-600 hover:underline">マスターチャンネルのコンプレッション8つのヒント (Media Integration)</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Community & Blogs -->
+                    <div>
+                        <h3 class="font-bold text-indigo-700 mb-4 text-sm uppercase tracking-wide border-l-4 border-indigo-500 pl-2">コミュニティ・ブログ (Community & Blogs)</h3>
+                        <ul class="list-disc list-inside text-sm space-y-2 text-slate-700">
+                            <li><a href="https://www.reddit.com/r/LiveSound" target="_blank" class="text-indigo-600 hover:underline">r/LiveSound (Reddit)</a> - Hierarchy of a live mix / Gain structure / Monitor mix</li>
+                            <li><a href="https://note.com/_guy/n/ncad1108007f3" target="_blank" class="text-indigo-600 hover:underline">私流、ライブPAでのVo.イコライジング (note: 櫻井氏)</a></li>
+                            <li><a href="https://note.com/oddeyelabo/n/nacfdac6286c7" target="_blank" class="text-indigo-600 hover:underline">コンプレッサーの基本！音圧とバランスを整えるテクニック (note: MaCo)</a></li>
+                            <li><a href="https://note.com/chic_ivy1743/n/n5cd7143864f1" target="_blank" class="text-indigo-600 hover:underline">プロが実践する1176系のセッティング術 (note: Wancovsky)</a></li>
+                            <li><a href="https://note.com/limeblog/n/n57382dead26c" target="_blank" class="text-indigo-600 hover:underline">ピアノのコンプレッサーとEQの値 (note: yorushion)</a></li>
+                            <li><a href="https://note.com/qfx/n/n9159a65c5e00" target="_blank" class="text-indigo-600 hover:underline">バンドで求められるリードギターの音作り (note: QFX)</a></li>
+                            <li><a href="https://effector-dataz.net/band-twinguitar-soundmake" target="_blank" class="text-indigo-600 hover:underline">バンドでかぶらないツインギターの音作り対策 (Full-Drive)</a></li>
+                            <li><a href="http://guiter-nihonnme.seesaa.net/article/371579029.html" target="_blank" class="text-indigo-600 hover:underline">ツインギター時の音の住み分け (Guitar Nihonme)</a></li>
+                        </ul>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    
+    <script>
+        // --- Navigation Logic ---
+        const tabs = [
+            { id: 'view-basics', label: '基本原則', icon: '📊' },
+            { id: 'view-eq', label: 'EQマップ', icon: '🎛️' },
+            { id: 'view-comp', label: 'ダイナミクス', icon: '📉' },
+            { id: 'view-fx', label: '空間・FX', icon: '🌊' },
+            { id: 'view-trouble', label: 'トラブル', icon: '🚨' },
+            { id: 'view-refs', label: '参考文献', icon: '📚' }
+        ];
+
+        const navContainer = document.getElementById('nav-container');
+        
+        // Render Nav
+        tabs.forEach((tab, index) => {
+            const btn = document.createElement('button');
+            btn.className = `pb-4 px-2 border-b-2 font-medium text-sm transition-colors ${index === 0 ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`;
+            btn.innerHTML = `<span class="mr-2">${tab.icon}</span>${tab.label}`;
+            btn.onclick = () => switchTab(tab.id, btn);
+            navContainer.appendChild(btn);
+        });
+
+        function switchTab(targetId, btnElement) {
+            // Update Tab UI
+            Array.from(navContainer.children).forEach(child => {
+                child.className = 'pb-4 px-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300';
+            });
+            btnElement.className = 'pb-4 px-2 border-b-2 font-medium text-sm transition-colors border-indigo-500 text-indigo-600';
+
+            // Show Content
+            document.querySelectorAll('.tab-content').forEach(el => {
+                el.classList.remove('active');
+            });
+            document.getElementById(targetId).classList.add('active');
+        }
+
+        function toggleMobileMenu() {
+            const nav = document.getElementById('main-nav');
+            if (nav.classList.contains('hidden')) {
+                nav.classList.remove('hidden');
+            } else {
+                // nav.classList.add('hidden'); // Simple toggle usually requires more structure, ignoring for SPA simplicity
+            }
+        }
+
+        // --- EQ Data & Logic (Bubble System) ---
+        // Use Range Bars instead of Points
+        function getLogPos(freq) {
+            const minLog = Math.log10(20);
+            const maxLog = Math.log10(20000);
+            const freqLog = Math.log10(freq);
+            return ((freqLog - minLog) / (maxLog - minLog)) * 100;
+        }
+
+        const eqBubblesData = {
+            vocal: {
+                label: 'Vocal',
+                icon: '🎤',
+                desc: '中高域が命。歌詞の明瞭度を上げるため、不要な低域とモコモコ感を削り、2kHz付近を確保する。',
+                bubbles: [
+                    { type: 'hpf', startFreq: 80, endFreq: 120, text: 'HPF:不要な低音', margin: '60px' },
+                    { type: 'cut', startFreq: 200, endFreq: 400, text: 'Cut:モコモコ感', margin: '100px' },
+                    { type: 'boost', startFreq: 2000, endFreq: 4000, text: 'Boost:歌詞の輪郭', margin: '50px' },
+                    { type: 'cut', startFreq: 5000, endFreq: 8000, text: 'Caution:歯擦音(サ行)', margin: '60px' }
+                ],
+                details: [
+                    { range: '80-120Hz', char: '吹かれ音、足音、不要な低音', action: '<strong>HPF (Low Cut):</strong> 必ず入れる。近接効果で低音が出過ぎる場合は120-150Hzまで上げることもある。' },
+                    { range: '200-400Hz', char: '「モコモコ」した成分、濁りの原因 (Mud)', action: '<strong>Cut (-1.5~3dB):</strong> 透明感を出すために少し削るポイント。削りすぎると声が細くなるので注意。' },
+                    { range: '2k-4kHz', char: '<strong>「おいしい帯域」</strong>、歌詞の輪郭、張り', action: '<strong>Boost (+1.5~3dB):</strong> 「ハイを上げて」と言われたらこの辺り(2.5kHz)を突く。ギターと被る場合はギター側を削る。' },
+                    { range: '5k-8kHz', char: 'プレゼンス、歯擦音(サ行)、空気感', action: '<strong>Caution:</strong> サ行が痛い場合は7kHz付近を狭くカット。抜けを良くしたい場合は4kHzを少し足す。' }
+                ]
+            },
+            kick: {
+                label: 'Kick',
+                icon: '🥁',
+                desc: '低音の重みとアタック感の両立。中域の「箱鳴り」を削ってドンシャリ気味にすると抜けが良い。',
+                bubbles: [
+                    { type: 'boost', startFreq: 50, endFreq: 80, text: 'Boost:重み・胴鳴り', margin: '50px' },
+                    { type: 'cut', startFreq: 250, endFreq: 400, text: 'Cut:箱鳴り・濁り', margin: '100px' },
+                    { type: 'boost', startFreq: 3000, endFreq: 5000, text: 'Boost:アタック(バチッ)', margin: '80px' }
+                ],
+                details: [
+                    { range: '50-80Hz', char: '重み、地を這う低音', action: '<strong>Boost:</strong> 音の土台。ベースが100Hzを担当するなら、キックは60Hzを出す(棲み分け)。' },
+                    { range: '250-400Hz', char: '「ボコボコ」した箱鳴り、濁り', action: '<strong>Cut:</strong> 大胆に削っても良いポイント。ここを削ると低域とアタックが分離して聞こえやすくなる。' },
+                    { range: '3k-5kHz', char: 'ビーター音(バチッ)、アタック', action: '<strong>Boost:</strong> ロック・ポップスではリズムを明確にするために不可欠。埋もれないように持ち上げる。' }
+                ]
+            },
+            snare: {
+                label: 'Snare',
+                icon: '🥁',
+                desc: 'ボディ（太さ）とスナッピー（抜け）を強調。段ボールのような中低域をカットする。',
+                bubbles: [
+                    { type: 'boost', startFreq: 150, endFreq: 250, text: 'Boost:ボディ(太さ)', margin: '50px' },
+                    { type: 'cut', startFreq: 400, endFreq: 600, text: 'Cut:段ボール音', margin: '100px' },
+                    { type: 'boost', startFreq: 3000, endFreq: 8000, text: 'Boost:スナッピー(抜け)', margin: '80px' }
+                ],
+                details: [
+                    { range: '150-250Hz', char: '胴鳴り、太さ、パワー感', action: '<strong>Boost:</strong> 線が細い場合に少し足す。上げすぎると他の低音楽器と干渉して濁る。' },
+                    { range: '400-600Hz', char: '「ポコポコ」した段ボール音', action: '<strong>Cut:</strong> 安っぽい響きになりがちな帯域。ここを削るとスッキリする。' },
+                    { range: '3k-8kHz', char: 'スナッピーの響き、アタック', action: '<strong>Boost:</strong> 5kHz付近を足すと抜けが良くなる。ボーカルと被る1-2kHzは避けるか少し引く。' }
+                ]
+            },
+            hihat: {
+                label: 'Hi-Hat',
+                icon: '📀',
+                desc: '「チッチッ」というリズムの刻み。低域は全く不要。高域のアタックと切れ味を出す。',
+                bubbles: [
+                    { type: 'hpf', startFreq: 100, endFreq: 300, text: 'HPF: 不要帯域', margin: '100px' },
+                    { type: 'cut', startFreq: 800, endFreq: 1200, text: 'Cut: スネア被り', margin: '60px' },
+                    { type: 'boost', startFreq: 6000, endFreq: 8000, text: 'Boost: チップ音(刻み)', margin: '50px' },
+                    { type: 'boost', startFreq: 10000, endFreq: 14000, text: 'Boost: シズル感', margin: '80px' }
+                ],
+                details: [
+                    { range: '100-300Hz', char: '不要な低音・スネア被り', action: '<strong>HPF:</strong> 100-300Hzまで入れてスネアの太さと被らないようにする。' },
+                    { range: '6k-8kHz', char: 'スティックで叩く音 (Tick)', action: '<strong>Boost:</strong> リズムの刻みをはっきりさせるために持ち上げる。' },
+                    { range: '10kHz以上', char: 'オープンの「シャー」音', action: '<strong>Boost:</strong> 少し足すとオープン時の広がりが出る。' }
+                ]
+            },
+            toms: {
+                label: 'Toms',
+                icon: '🥁',
+                desc: '基本はキック/スネアと同様、中域の箱鳴りを削ってアタックと胴鳴りを強調する。',
+                bubbles: [
+                    { type: 'hpf', startFreq: 60, endFreq: 100, text: 'HPF: 不要な低音', margin: '60px' },
+                    { type: 'boost', startFreq: 100, endFreq: 200, text: 'Boost: 胴鳴り(ドン)', margin: '50px' },
+                    { type: 'cut', startFreq: 300, endFreq: 600, text: 'Cut: 箱鳴り(ボーン)', margin: '100px' },
+                    { type: 'boost', startFreq: 3000, endFreq: 5000, text: 'Boost: アタック', margin: '80px' }
+                ],
+                details: [
+                    { range: '80-150Hz', char: 'タムの「ドン」という太さ', action: '<strong>Boost:</strong> フロアタムは80Hz付近、ハイタムは150Hz付近に基音がある。' },
+                    { range: '300-600Hz', char: '「ボーン」と長く響く箱鳴り', action: '<strong>Cut:</strong> 抜けを悪くする元凶。ここを削るとタイトで現代的な音になる。' },
+                    { range: '3k-5kHz', char: 'スティックが当たるアタック音', action: '<strong>Boost:</strong> 埋もれ防止。スネアより少し高めを狙うと分離が良い。' }
+                ]
+            },
+            overhead: {
+                label: 'OH',
+                icon: '☁️',
+                desc: 'シンバルや全体の空気感。キック・スネア・タムの低域が混ざらないようHPFを強く入れる。',
+                bubbles: [
+                    { type: 'hpf', startFreq: 200, endFreq: 500, text: 'HPF: 低音大胆カット', margin: '100px' },
+                    { type: 'cut', startFreq: 800, endFreq: 1000, text: 'Cut: タム・スネア被り', margin: '60px' },
+                    { type: 'boost', startFreq: 8000, endFreq: 12000, text: 'Boost: 空気感・輝き', margin: '50px' }
+                ],
+                details: [
+                    { range: '400Hz以下', char: 'キック・ベースの回り込み', action: '<strong>HPF (High Pass):</strong> 400Hzくらいまでバッサリ切る。シンバルの実体はもっと上。' },
+                    { range: '800-1kHz', char: 'スネアやタムの響き', action: '<strong>Cut:</strong> ここを削るとドラム全体の音がクリアになり、分離が良くなる。' },
+                    { range: '8k-12kHz', char: 'シンバルの煌びやかさ', action: '<strong>Boost:</strong> 「シャーン」という広がりを強調。耳に痛くない程度に。' }
+                ]
+            },
+            bass: {
+                label: 'Bass',
+                icon: '🎸',
+                desc: '超低域はカットしてアンプ負荷を減らす。キックと帯域が被らないよう、美味しい帯域以外は譲る。',
+                bubbles: [
+                    { type: 'hpf', startFreq: 30, endFreq: 50, text: 'HPF:超低域カット', margin: '60px' },
+                    { type: 'boost', startFreq: 100, endFreq: 200, text: 'Boost:音程感', margin: '50px' },
+                    { type: 'boost', startFreq: 700, endFreq: 1200, text: 'Boost:指弾きの輪郭', margin: '80px' }
+                ],
+                details: [
+                    { range: '30-50Hz', char: '不要な振動、エネルギーロス', action: '<strong>HPF:</strong> 基本的にカットして、アンプのパワーを有効帯域に回す。' },
+                    { range: '100-200Hz', char: '音程感、太さ', action: '<strong>Boost/Cut:</strong> キックが60Hzならベースはここを出す。逆にキックが80Hzなら100Hz付近は譲る(棲み分け)。' },
+                    { range: '700-1.2kHz', char: '指のアタック、「ゴリッ」とした成分', action: '<strong>Boost:</strong> バンドで埋もれて聞こえない時は、音量より先にここを少し上げるとラインが見える。' }
+                ]
+            },
+            guitar: {
+                label: 'Guitar',
+                icon: '🎸',
+                desc: 'ボーカルの最大のライバル。中低域の「泥」を取り、ボーカルのプレゼンス（2kHz）を空ける。',
+                bubbles: [
+                    { type: 'hpf', startFreq: 80, endFreq: 120, text: 'HPF:ベースに譲る', margin: '60px' },
+                    { type: 'cut', startFreq: 200, endFreq: 500, text: 'Cut:泥(Mud)/被り', margin: '100px' },
+                    { type: 'cut', startFreq: 2000, endFreq: 3000, text: 'Cut:ボーカルに譲る', margin: '120px' }
+                ],
+                details: [
+                    { range: '100Hz以下', char: 'ベースとの被り', action: '<strong>HPF:</strong> バンドでは不要。ベースのためにスペースを空ける。' },
+                    { range: '200-500Hz', char: '太さでもあるが、篭もりの原因', action: '<strong>Cut:</strong> ここを整理すると一気にミックスが晴れる。-3dB程度を目安に。' },
+                    { range: '2k-3kHz', char: 'エッジ、ボーカルの芯', action: '<strong>Cut:</strong> ボーカルの歌詞が聞き取れない時は、ギターのここを少し下げる（譲り合い）。' },
+                    { range: '3k-4kHz', char: '耳に痛い成分', action: '<strong>Cut:</strong> 音量を上げると耳障りな場合、ここをピンポイントで削る。' }
+                ]
+            },
+            twin_guitar: {
+                label: 'Twin Gt',
+                icon: '🎸🎸',
+                desc: '2本のギターを差別化する。音色（Mid重視 vs ドンシャリ）と定位（Pan）で分けるのが基本。',
+                bubbles: [
+                    { type: 'boost', startFreq: 800, endFreq: 1200, text: 'Gt1: Mid Boost', margin: '50px' },
+                    { type: 'cut', startFreq: 800, endFreq: 1200, text: 'Gt2: Mid Cut', margin: '100px' },
+                    { type: 'boost', startFreq: 3000, endFreq: 5000, text: 'Gt2: High Boost', margin: '80px' }
+                ],
+                details: [
+                    { range: 'アプローチ', char: '音色の差別化 (Tone)', action: '<strong>基本:</strong> 片方は「中域重視（粘りのある音）」、もう片方は「ドンシャリ（上下が出た音）」にセッティングを変える。' },
+                    { range: '800-1kHz', char: 'ギターの「顔」となる中域', action: '<strong>Gt1 (Lead/Riff):</strong> ここをブーストして前に出す。<br><strong>Gt2 (Backing):</strong> ここをカットしてGt1とボーカルの邪魔をしないようにする。' },
+                    { range: 'Pan (定位)', char: '配置による分離', action: '<strong>L/R振り:</strong> EQだけでなく、パンを左右（例: L60 / R60）に振ることで物理的に分離させるのが最も効果的。' }
+                ]
+            },
+            keys: {
+                label: 'Keys',
+                icon: '🎹',
+                desc: '音色によるが、基本は低音をベースに譲る。パッド系は中域メインにしてギターの邪魔をしない。',
+                bubbles: [
+                    { type: 'hpf', startFreq: 80, endFreq: 150, text: 'HPF:左手の低音整理', margin: '60px' },
+                    { type: 'cut', startFreq: 300, endFreq: 600, text: 'Cut:厚みの調整', margin: '100px' },
+                    { type: 'boost', startFreq: 2000, endFreq: 5000, text: 'Boost:きらびやかさ・アタック', margin: '50px' }
+                ],
+                details: [
+                    { range: '100Hz以下', char: '左手のベース音域', action: '<strong>HPF:</strong> ベースがいるならカット。ソロピアノの場合は残す。' },
+                    { range: '300-600Hz', char: '厚み、混濁', action: '<strong>Cut:</strong> ギターと被りやすい。バッキングに徹するなら少し削ってスッキリさせる。' },
+                    { range: '2k-5kHz', char: 'きらびやかさ、アタック', action: '<strong>Boost/Cut:</strong> ピアノソロなら出す。歌のバックなら少し控えて歌を立てる。' }
+                ]
+            }
+        };
+
+        const eqGridContainer = document.getElementById('eq-grid-container');
+        const bubblesLayer = document.getElementById('bubbles-layer');
+        const detailTableBody = document.getElementById('eq-detail-table-body');
+
+        // Generate Grid Buttons
+        // Combined list in order: Vocal, Guitars, Bass, Keys, then Drums
+        const eqOrder = ['vocal', 'guitar', 'twin_guitar', 'bass', 'keys', 'kick', 'snare', 'hihat', 'toms', 'overhead'];
+
+        eqOrder.forEach(key => {
+            const data = eqBubblesData[key];
+            const btn = document.createElement('button');
+            btn.className = `inst-btn`;
+            btn.innerHTML = `<span class="inst-icon">${data.icon}</span><span>${data.label}</span>`;
+            btn.onclick = () => selectEqInstrument(key, btn);
+            eqGridContainer.appendChild(btn);
+        });
+
+        function selectEqInstrument(key, btn) {
+            // Reset styles
+            Array.from(eqGridContainer.children).forEach(b => b.classList.remove('active'));
+            // Set active
+            btn.classList.add('active');
+
+            const data = eqBubblesData[key];
+            
+            // Update Text
+            document.getElementById('eq-target-title').innerText = data.label + (data.label.includes('(') ? '' : ` (${key})`);
+
+            // Render Bubbles with Range Bars
+            bubblesLayer.innerHTML = '';
+            
+            data.bubbles.forEach((b, index) => {
+                // Calculate left position (start frequency) and width
+                const startPos = getLogPos(b.startFreq || b.freq);
+                let width = 0;
+                
+                if (b.endFreq) {
+                     const endPos = getLogPos(b.endFreq);
+                     width = endPos - startPos;
+                } else {
+                    // Fallback for single point if data missing (shouldn't happen with updated data)
+                    width = 2; // minimal width
+                }
+
+                const rangeContainer = document.createElement('div');
+                rangeContainer.className = `eq-range-container ${b.type}`;
+                rangeContainer.style.left = `${startPos}%`;
+                rangeContainer.style.width = `${width}%`;
+
+                // Determine margin style
+                let marginStyle = '';
+                if (b.type === 'boost') {
+                    marginStyle = `margin-bottom: ${b.margin || '50px'}`;
+                } else {
+                    marginStyle = `margin-top: ${b.margin || '60px'}`;
+                }
+                
+                // Inner HTML: Bar + Bubble + Connector
+                // Connector height matches bubble margin
+                let connectorHeight = b.margin || (b.type === 'boost' ? '50px' : '60px');
+                
+                rangeContainer.innerHTML = `
+                    <div class="eq-range-bar"></div>
+                    <div class="bubble-connector" style="height:${connectorHeight}"></div>
+                    <div class="eq-bubble" style="${marginStyle}">${b.text}</div>
+                `;
+                
+                setTimeout(() => {
+                    rangeContainer.classList.add('show');
+                }, index * 100);
+
+                bubblesLayer.appendChild(rangeContainer);
+            });
+
+            // Render Detail Table
+            detailTableBody.innerHTML = '';
+            if (data.details) {
+                data.details.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'freq-row border-b last:border-0';
+                    tr.innerHTML = `
+                        <td class="px-6 py-4 font-mono font-bold text-indigo-700 w-1/5 whitespace-nowrap">${row.range}</td>
+                        <td class="px-6 py-4 w-1/4">${row.char}</td>
+                        <td class="px-6 py-4 w-1/2 text-sm leading-relaxed">${row.action}</td>
+                    `;
+                    detailTableBody.appendChild(tr);
+                });
+            } else {
+                detailTableBody.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-slate-500">No detailed data available.</td></tr>';
+            }
+        }
+
+        // Initialize EQ with Vocal (first button)
+        selectEqInstrument('vocal', eqGridContainer.children[0]);
+
+
+        // --- Compressor Logic (Expanded & Visual Updated) ---
+        const compData = {
+            vocal: {
+                label: 'Vocal',
+                ratio: '3:1 ~ 4:1', ratioVal: 40,
+                attack: '10 ~ 30ms', attackVal: 30,
+                release: '50 ~ 150ms', releaseVal: 20,
+                desc: '<h4 class="font-bold text-indigo-700">目的：歌詞の明瞭度UPと均一化</h4><p class="mb-3">人の声はダイナミクス幅が広く、オケに埋もれやすい。コンプで小さい成分（語尾や子音）を持ち上げ、叫び声などのピークを抑えることで、フェーダー操作に依存せずとも歌詞が安定して聞こえるようにする。</p><h4 class="font-bold text-indigo-700 mt-3">設定の指針</h4><ul class="list-disc list-inside space-y-1"><li><strong>Attack:</strong> 速すぎる設定は子音を潰し、歌詞の判別を困難にします。10ms〜30ms程度遅らせ、「カッ」「タッ」といった発音の頭を通過させることが重要です。</li><li><strong>Ratio:</strong> 4:1が標準的です。強くかけるほど音像は前に出ますが、ブレスノイズの強調やハウリングのリスクが高まるため注意が必要です。</li><li><strong>Release:</strong> 歌唱のテンポやフレーズの切れ目に合わせ、不自然な音量変動（ポンピング）が生じない長さを探ります。</li></ul>'
+            },
+            kick: {
+                label: 'Kick',
+                ratio: '4:1 ~ 6:1', ratioVal: 60,
+                attack: '5 ~ 20ms', attackVal: 20,
+                release: '150 ~ 250ms', releaseVal: 40,
+                desc: '<h4 class="font-bold text-indigo-700">目的：アタック感の強調（パンチ）</h4><p class="mb-3">キックドラムの「ドンッ」という低音成分と、「バチッ」というビーターのアタック音を整理します。余韻を整えつつアタックを強調し、リズムの芯を形成します。</p><h4 class="font-bold text-indigo-700 mt-3">設定の指針</h4><ul class="list-disc list-inside space-y-1"><li><strong>Attack (Slow Attack):</strong> 最も重要なパラメータです。5〜20ms程度遅らせることで、初期のビーター衝撃音（トランジェント）を非圧縮で通過させ、その直後の胴鳴りを圧縮します。これによりアタック感が際立ちます。</li><li><strong>Release:</strong> 次のキックが鳴る前にゲインリダクションが戻りきる長さに設定します。長すぎると次打が小さくなり、短すぎると低域の波形歪みを招く可能性があります。</li></ul>'
+            },
+            snare: {
+                label: 'Snare',
+                ratio: '3:1 ~ 4:1', ratioVal: 40,
+                attack: '10 ~ 30ms', attackVal: 30,
+                release: '100 ~ 200ms', releaseVal: 35,
+                desc: '<h4 class="font-bold text-indigo-700">目的：ピーク制御と音の太さ</h4><p class="mb-3">スネアは瞬発的なエネルギーが非常に大きく、クリップの原因となりやすい楽器です。ピークを抑えつつ、リリースを調整して余韻（スナッピーの響き）を持ち上げることで、音の太さを演出します。</p><h4 class="font-bold text-indigo-700 mt-3">設定の指針</h4><ul class="list-disc list-inside space-y-1"><li><strong>Attack:</strong> キック同様、10ms以上遅らせてスティックの打撃音を残します。速すぎると音が奥に引っ込み、迫力が失われます。</li><li><strong>Release:</strong> 短めに設定すると響きが持ち上がり、派手な印象になります。バラード等で余韻を聴かせたい場合は長めに調整します。</li></ul>'
+            },
+            bass: {
+                label: 'Bass',
+                ratio: '4:1 ~ 8:1', ratioVal: 65,
+                attack: '20 ~ 50ms', attackVal: 45,
+                release: '200ms~', releaseVal: 50,
+                desc: '<h4 class="font-bold text-indigo-700">目的：音粒の均一化と低域の安定</h4><p class="mb-3">指弾きやピック弾きによる音量差を解消し、楽曲の土台として常に一定の低音を提供します。ベースラインが安定することで、ミックス全体が引き締まります。</p><h4 class="font-bold text-indigo-700 mt-3">設定の指針</h4><ul class="list-disc list-inside space-y-1"><li><strong>Ratio:</strong> 4:1〜8:1と比較的高めに設定し、しっかりと抑え込むことが一般的です。</li><li><strong>Attack:</strong> 指のタッチ（ニュアンス）を残すため、20ms以上確保します。速すぎるとアタックが消失し、平坦な音になります。</li><li><strong>Release:</strong> 低音の波形は周期が長いため、リリースが速すぎると波形自体を歪ませる（低周波歪み）原因となります。余裕を持って長め（200ms〜）に設定します。</li></ul>'
+            },
+            eguitar: {
+                label: 'E.Guitar',
+                ratio: '3:1 ~ 4:1', ratioVal: 40,
+                attack: '10 ~ 20ms', attackVal: 20,
+                release: 'Rhythm', releaseVal: 30,
+                desc: '<h4 class="font-bold text-indigo-700">目的：カッティング/アルペジオの粒立ち</h4><p class="mb-3">歪み系のギターは既に圧縮されていますが、クリーントーンのカッティングやアルペジオにおいては、音の粒を揃え、ミックスへの馴染みを良くするために有効です。</p><h4 class="font-bold text-indigo-700 mt-3">設定の指針</h4><ul class="list-disc list-inside space-y-1"><li><strong>Attack:</strong> カッティング特有のリズム感を損なわないよう、アタックは少し残します。</li><li><strong>Threshold:</strong> 強く弾いた瞬間にのみ軽くゲインリダクションがかかる程度に、浅く設定するのが自然なコンプレッションのコツです。</li></ul>'
+            },
+            aguitar: {
+                label: 'A.Guitar',
+                ratio: '2:1 ~ 4:1', ratioVal: 35,
+                attack: '5 ~ 15ms', attackVal: 15,
+                release: '100ms~', releaseVal: 30,
+                desc: '<h4 class="font-bold text-indigo-700">目的：ストロークのピーク制御</h4><p class="mb-3">アコースティックギターのストロークはダイナミクスが激しく、突発的なピークが発生しやすい特性があります。ピークを抑えつつ全体のレベルを持ち上げることで、きらびやかな音色を維持します。</p><h4 class="font-bold text-indigo-700 mt-3">設定の指針</h4><ul class="list-disc list-inside space-y-1"><li><strong>Attack:</strong> 「ジャカッ」という鋭いピークを逃さないよう、他の楽器よりやや速め（5ms〜）に設定してピークを叩きます。</li><li><strong>Ratio:</strong> 自然な響きを損なわないよう、2:1〜3:1程度で軽めにかけるのが推奨されます。</li></ul>'
+            },
+            keys: {
+                label: 'Keys',
+                ratio: '2:1 ~ 4:1', ratioVal: 35,
+                attack: '10 ~ 50ms', attackVal: 40,
+                release: '50 ~ 300ms', releaseVal: 45,
+                desc: '<h4 class="font-bold text-indigo-700">目的：ダイナミクスの安定化</h4><p class="mb-3">ピアノは打鍵の強弱がダイレクトに音量に反映されるため、バンドアンサンブルの中では音が突出したり埋没したりしやすい楽器です。コンプレッサーで平滑化し、定位を安定させます。</p><h4 class="font-bold text-indigo-700 mt-3">設定の指針</h4><ul class="list-disc list-inside space-y-1"><li><strong>バッキング時:</strong> Ratio 4:1程度で深めにかけ、ギターやボーカルを邪魔しない「壁」のような安定した音を作ります。</li><li><strong>ソロ/バラード時:</strong> Ratio 2:1程度で浅くかけ、演奏者のタッチのニュアンス（強弱表現）を殺さないように配慮します。</li></ul>'
+            }
+        };
+
+        const compTabsContainer = document.getElementById('comp-tabs-container');
+
+        // Create Grid for Comp Buttons too
+        Object.keys(compData).forEach(key => {
+            const btn = document.createElement('button');
+            btn.id = `comp-btn-${key}`;
+            btn.className = 'inst-btn';
+            btn.innerHTML = `<span class="inst-icon">${eqBubblesData[key] ? eqBubblesData[key].icon : '🎛️'}</span><span>${compData[key].label}</span>`;
+            btn.onclick = () => updateComp(key);
+            compTabsContainer.appendChild(btn);
+        });
+
+        function updateComp(target) {
+            // UI Button State
+            Object.keys(compData).forEach(t => {
+                const b = document.getElementById(`comp-btn-${t}`);
+                if (t === target) {
+                    b.classList.add('active');
+                } else {
+                    b.classList.remove('active');
+                }
+            });
+
+            const d = compData[target];
+            
+            // Update Text
+            document.getElementById('comp-target-name').innerText = d.label + " Setting";
+            document.getElementById('comp-description').innerHTML = d.desc;
+            
+            document.getElementById('val-ratio').innerText = d.ratio;
+            document.getElementById('val-attack').innerText = d.attack;
+            document.getElementById('val-release').innerText = d.release;
+
+            // Animate Sliders (Map arbitrary 0-100 values to height %)
+            setSlider('thumb-ratio', 'fill-ratio', d.ratioVal);
+            setSlider('thumb-attack', 'fill-attack', d.attackVal);
+            setSlider('thumb-release', 'fill-release', d.releaseVal);
+        }
+
+        function setSlider(thumbId, fillId, val) {
+            // val 0-100 maps to 0% to 100% height
+            document.getElementById(thumbId).style.bottom = `${val}%`;
+            document.getElementById(fillId).style.height = `${val}%`;
+        }
+
+        // Init Comp with Vocal
+        updateComp('vocal');
+
+    </script>
+</body>
+</html>
